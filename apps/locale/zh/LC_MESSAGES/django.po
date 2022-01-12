@@ -644,7 +644,7 @@ msgstr "外网"
 
 #: assets/models/cluster.py:27
 msgid "Operator"
-msgstr "运营商"
+msgstr "操作符"
 
 #: assets/models/cluster.py:36 assets/models/group.py:34
 #: xpack/plugins/cloud/providers/nutanix.py:30

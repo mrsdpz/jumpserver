@@ -4,6 +4,8 @@ from django.utils.translation import ugettext_lazy as _
 from orgs.mixins.models import OrgModelMixin, OrgManager
 from .base import BaseACL, BaseACLQuerySet
 from common.utils.ip import contains_ip
+from common.db.utils import ModelJSONFieldUtil
+from orgs.utils import tmp_to_org
 
 
 class ACLManager(OrgManager):
@@ -17,6 +19,7 @@ class LoginAssetACL(BaseACL, OrgModelMixin):
         login_confirm = 'login_confirm', _('Login confirm')
 
     # 条件
+    # TODO: 下一步封装一个多策略Model和Serializer字段
     users = models.JSONField(verbose_name=_('User'))
     system_users = models.JSONField(verbose_name=_('System User'))
     assets = models.JSONField(verbose_name=_('Asset'))
@@ -42,44 +45,47 @@ class LoginAssetACL(BaseACL, OrgModelMixin):
     def __str__(self):
         return self.name
 
+    # TODO: 下一步放入封装的Model字段中
+    def get_users_objects(self):
+        queryset = self.org.get_members()
+        util = ModelJSONFieldUtil(value=self.users, queryset=queryset, org=self.org)
+        queryset = util.to_queryset()
+        return queryset
+
+    def get_assets_objects(self):
+        from assets.models import Asset
+        queryset = Asset.objects
+        util = ModelJSONFieldUtil(value=self.users, queryset=queryset, org=self.org)
+        queryset = util.to_queryset()
+        return queryset
+
+    def get_system_users_objects(self):
+        from assets.models import SystemUser
+        queryset = SystemUser.objects
+        util = ModelJSONFieldUtil(value=self.users, queryset=queryset, org=self.org)
+        queryset = util.to_queryset()
+        return queryset
+
     @classmethod
     def filter(cls, user, asset, system_user, action):
         queryset = cls.objects.filter(action=action)
-        queryset = cls.filter_user(user, queryset)
-        queryset = cls.filter_asset(asset, queryset)
-        queryset = cls.filter_system_user(system_user, queryset)
+        queryset = cls.filter_by_json_field(queryset, field_name='users', instance=user)
+        queryset = cls.filter_by_json_field(queryset, field_name='assets', instance=asset)
+        queryset = cls.filter_by_json_field(queryset, field_name='system_users', instance=system_user)
         return queryset
 
     @classmethod
-    def filter_user(cls, user, queryset):
-        queryset = queryset.filter(
-            Q(users__username_group__contains=user.username) |
-            Q(users__username_group__contains='*')
-        )
-        return queryset
-
-    @classmethod
-    def filter_asset(cls, asset, queryset):
-        queryset = queryset.filter(
-            Q(assets__hostname_group__contains=asset.hostname) |
-            Q(assets__hostname_group__contains='*')
-        )
-        ids = [q.id for q in queryset if contains_ip(asset.ip, q.assets.get('ip_group', []))]
+    def filter_by_json_field(cls, queryset, field_name, instance):
+        ids = []
+        for q in queryset:
+            get_instances = getattr(q, f'get_{field_name}_objects', None)
+            if not get_instances:
+                continue
+            instances = get_instances()
+            instances_ids = instances.values_list('id', flat=True)
+            if instance.id in instances_ids:
+                ids.append(q.id)
         queryset = cls.objects.filter(id__in=ids)
-        return queryset
-
-    @classmethod
-    def filter_system_user(cls, system_user, queryset):
-        queryset = queryset.filter(
-            Q(system_users__name_group__contains=system_user.name) |
-            Q(system_users__name_group__contains='*')
-        ).filter(
-            Q(system_users__username_group__contains=system_user.username) |
-            Q(system_users__username_group__contains='*')
-        ).filter(
-            Q(system_users__protocol_group__contains=system_user.protocol) |
-            Q(system_users__protocol_group__contains='*')
-        )
         return queryset
 
     @classmethod
@@ -100,4 +106,3 @@ class LoginAssetACL(BaseACL, OrgModelMixin):
         ticket.create_process_map_and_node(assignees)
         ticket.open(applicant=user)
         return ticket
-

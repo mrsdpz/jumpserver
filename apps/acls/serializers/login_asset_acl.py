@@ -2,6 +2,8 @@ from rest_framework import serializers
 from django.utils.translation import ugettext_lazy as _
 from orgs.mixins.serializers import BulkOrgResourceModelSerializer
 from assets.models import SystemUser
+from common.drf.serializers import MethodSerializer
+from common.db.utils import ModelJSONFieldUtil
 from acls import models
 from orgs.models import Organization
 
@@ -9,68 +11,69 @@ from orgs.models import Organization
 __all__ = ['LoginAssetACLSerializer']
 
 
-common_help_text = _('Format for comma-delimited string, with * indicating a match all. ')
+common_help_text = _('Format for comma-delimited string.')
 
 
-class LoginAssetACLUsersSerializer(serializers.Serializer):
-    username_group = serializers.ListField(
-        default=['*'], child=serializers.CharField(max_length=128), label=_('Username'),
-        help_text=common_help_text
+class RuleSerializer(serializers.Serializer):
+    attr = MethodSerializer()
+    operator = serializers.ChoiceField(
+        choices=ModelJSONFieldUtil.AttrOperator.choices, label=_('Operator')
     )
+    values = serializers.ListField(default=[], child=serializers.CharField(), label=_('Content'))
+
+    def get_params_attr_choices(self):
+        choices = []
+        parent = self.parent
+        while parent is not None:
+            if isinstance(parent, ResourceSerializer) and hasattr(parent, 'attr_choices'):
+                choices = parent.attr_choices
+                break
+            parent = parent.parent
+        return choices
+
+    def get_attr_serializer(self):
+        choices = self.get_params_attr_choices()
+        return serializers.ChoiceField(choices=choices, label=_('Attribute'))
 
 
-class LoginAssetACLAssestsSerializer(serializers.Serializer):
-    ip_group_help_text = _(
-        'Format for comma-delimited string, with * indicating a match all. '
-        'Such as: '
-        '192.168.10.1, 192.168.1.0/24, 10.1.1.1-10.1.1.20, 2001:db8:2de::e13, 2001:db8:1a:1110::/64 '
-        '(Domain name support)'
+class AttrsSerializer(serializers.Serializer):
+    logical_operator = serializers.ChoiceField(
+        choices=ModelJSONFieldUtil.RuleLogicalOperator.choices, label=_('Logical operator')
     )
-
-    ip_group = serializers.ListField(
-        default=['*'], child=serializers.CharField(max_length=1024), label=_('IP'),
-        help_text=ip_group_help_text
-    )
-    hostname_group = serializers.ListField(
-        default=['*'], child=serializers.CharField(max_length=128), label=_('Hostname'),
-        help_text=common_help_text
-    )
+    rules = serializers.ListField(default=[], child=RuleSerializer(), label=_('Rules'))
 
 
-class LoginAssetACLSystemUsersSerializer(serializers.Serializer):
-    protocol_group_help_text = _(
-        'Format for comma-delimited string, with * indicating a match all. '
-        'Protocol options: {}'
+class ResourceSerializer(serializers.Serializer):
+    strategy = serializers.ChoiceField(
+        choices=ModelJSONFieldUtil.ResourceStrategy.choices, label=_('Strategy')
     )
+    objects = serializers.ListField(default=[], child=serializers.UUIDField(), label=_('Objects'))
+    attrs = AttrsSerializer(help_text=common_help_text)
 
-    name_group = serializers.ListField(
-        default=['*'], child=serializers.CharField(max_length=128), label=_('Name'),
-        help_text=common_help_text
-    )
-    username_group = serializers.ListField(
-        default=['*'], child=serializers.CharField(max_length=128), label=_('Username'),
-        help_text=common_help_text
-    )
-    protocol_group = serializers.ListField(
-        default=['*'], child=serializers.CharField(max_length=16), label=_('Protocol'),
-        help_text=protocol_group_help_text.format(
-            ', '.join([SystemUser.Protocol.ssh, SystemUser.Protocol.telnet])
-        )
-    )
-
-    @staticmethod
-    def validate_protocol_group(protocol_group):
-        unsupported_protocols = set(protocol_group) - set(SystemUser.ASSET_CATEGORY_PROTOCOLS + ['*'])
-        if unsupported_protocols:
-            error = _('Unsupported protocols: {}').format(unsupported_protocols)
-            raise serializers.ValidationError(error)
-        return protocol_group
+    def __init__(self, attr_choices: list, **kwargs):
+        self.attr_choices = attr_choices
+        super().__init__(**kwargs)
 
 
 class LoginAssetACLSerializer(BulkOrgResourceModelSerializer):
-    users = LoginAssetACLUsersSerializer()
-    assets = LoginAssetACLAssestsSerializer()
-    system_users = LoginAssetACLSystemUsersSerializer()
+    users = ResourceSerializer(
+        attr_choices=[
+            ('username', _('Username'))
+        ]
+    )
+    assets = ResourceSerializer(
+        attr_choices=[
+            ('hostname', _('Hostname')),
+            ('ip', 'IP')
+        ]
+    )
+    system_users = ResourceSerializer(
+        attr_choices=[
+            ('name', _('Name')),
+            ('username', _('Username')),
+            ('protocol', _('Protocol'))
+        ]
+    )
     reviewers_amount = serializers.IntegerField(read_only=True, source='reviewers.count')
     action_display = serializers.ReadOnlyField(source='get_action_display', label=_('Action'))
 

@@ -79,6 +79,11 @@ class SimpleMetadataWithFilters(SimpleMetadata):
         elif getattr(field, 'fields', None):
             field_info['children'] = self.get_serializer_info(field)
 
+        # Top后会出现import异常
+        from .serializers import MethodSerializer
+        if isinstance(field, MethodSerializer) and hasattr(field, 'serializer'):
+            field = field.serializer
+
         if not isinstance(field, (serializers.RelatedField, serializers.ManyRelatedField)) \
                 and hasattr(field, 'choices'):
             field_info['choices'] = [
