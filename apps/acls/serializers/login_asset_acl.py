@@ -17,7 +17,9 @@ common_help_text = _('Format for comma-delimited string.')
 class RuleSerializer(serializers.Serializer):
     attr = MethodSerializer()
     operator = serializers.ChoiceField(
-        choices=ModelJSONFieldUtil.AttrOperator.choices, label=_('Operator')
+        choices=ModelJSONFieldUtil.AttrOperator.choices,
+        default=ModelJSONFieldUtil.AttrOperator.equal,
+        label=_('Operator')
     )
     values = serializers.ListField(default=[], child=serializers.CharField(), label=_('Content'))
 
@@ -38,17 +40,21 @@ class RuleSerializer(serializers.Serializer):
 
 class AttrsSerializer(serializers.Serializer):
     logical_operator = serializers.ChoiceField(
-        choices=ModelJSONFieldUtil.RuleLogicalOperator.choices, label=_('Logical operator')
+        choices=ModelJSONFieldUtil.RuleLogicalOperator.choices,
+        default=ModelJSONFieldUtil.RuleLogicalOperator.and_,
+        label=_('Logical operator')
     )
     rules = serializers.ListField(default=[], child=RuleSerializer(), label=_('Rules'))
 
 
 class ResourceSerializer(serializers.Serializer):
     strategy = serializers.ChoiceField(
-        choices=ModelJSONFieldUtil.ResourceStrategy.choices, label=_('Strategy')
+        required=True, choices=ModelJSONFieldUtil.ResourceStrategy.choices, label=_('Strategy')
     )
-    objects = serializers.ListField(default=[], child=serializers.UUIDField(), label=_('Objects'))
-    attrs = AttrsSerializer(help_text=common_help_text)
+    objects = serializers.ListField(
+        required=False, default=[], child=serializers.UUIDField(), label=_('Objects')
+    )
+    attrs = AttrsSerializer(required=False, default={})
 
     def __init__(self, attr_choices: list, **kwargs):
         self.attr_choices = attr_choices

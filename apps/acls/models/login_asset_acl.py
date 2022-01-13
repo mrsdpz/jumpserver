@@ -6,6 +6,7 @@ from .base import BaseACL, BaseACLQuerySet
 from common.utils.ip import contains_ip
 from common.db.utils import ModelJSONFieldUtil
 from orgs.utils import tmp_to_org
+from common.db.encoder import ModelJSONFieldEncoder
 
 
 class ACLManager(OrgManager):
@@ -20,9 +21,15 @@ class LoginAssetACL(BaseACL, OrgModelMixin):
 
     # 条件
     # TODO: 下一步封装一个多策略Model和Serializer字段
-    users = models.JSONField(verbose_name=_('User'))
-    system_users = models.JSONField(verbose_name=_('System User'))
-    assets = models.JSONField(verbose_name=_('Asset'))
+    users = models.JSONField(
+        encoder=ModelJSONFieldEncoder, default=dict, verbose_name=_("User")
+    )
+    assets = models.JSONField(
+        encoder=ModelJSONFieldEncoder, default=dict, verbose_name=_("Asset")
+    )
+    system_users = models.JSONField(
+        encoder=ModelJSONFieldEncoder, default=dict, verbose_name=_("System User")
+    )
     # 动作
     action = models.CharField(
         max_length=64, choices=ActionChoices.choices, default=ActionChoices.login_confirm,
