@@ -26,9 +26,10 @@ logger = logging.getLogger(__file__)
 
 
 class TerminalViewSet(JMSBulkModelViewSet):
-    queryset = Terminal.objects.filter(is_deleted=False)
+    queryset = Terminal.objects.active()
     serializer_class = serializers.TerminalSerializer
-    filterset_fields = ['name', 'remote_addr', 'type']
+    search_fields = ['name', 'remote_addr', 'type']
+    filterset_fields = search_fields
     custom_filter_fields = ['status']
 
     def destroy(self, request, *args, **kwargs):

@@ -8,7 +8,7 @@ from users.models import User
 from assets.models import Asset, SystemUser, Gateway, Domain, CommandFilterRule
 from applications.models import Application
 from users.serializers import UserProfileSerializer
-from assets.serializers import ProtocolsField
+from common.drf.serializers import AssetProtocolsField as ProtocolsField
 from perms.serializers.base import ActionsField
 from .models import AccessKey
 

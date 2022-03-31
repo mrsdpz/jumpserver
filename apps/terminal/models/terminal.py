@@ -95,6 +95,27 @@ class StorageMixin:
         return {"TERMINAL_REPLAY_STORAGE": config}
 
 
+class BaseTerminalQuerySet(models.QuerySet):
+    def undeleted(self):
+        return self.filter(is_deleted=False)
+
+    def active(self):
+        return self.undeleted().filter(user__is_active=True)
+
+    def alive(self):
+        ids = [i.id for i in self.active() if i.is_alive]
+        return self.filter(id__in=ids)
+
+
+class TerminalManager(models.Manager):
+
+    def active(self):
+        return self.get_queryset().active()
+
+    def alive(self):
+        return self.get_queryset().alive()
+
+
 class Terminal(StorageMixin, TerminalStatusMixin, models.Model):
     id = models.UUIDField(default=uuid.uuid4, primary_key=True)
     name = models.CharField(max_length=128, verbose_name=_('Name'))
@@ -112,6 +133,9 @@ class Terminal(StorageMixin, TerminalStatusMixin, models.Model):
     is_deleted = models.BooleanField(default=False)
     date_created = models.DateTimeField(auto_now_add=True)
     comment = models.TextField(blank=True, verbose_name=_('Comment'))
+    domains = models.ManyToManyField('assets.Domain', related_name='terminals', blank=True, verbose_name=_("Domain"))
+
+    objects = TerminalManager.from_queryset(BaseTerminalQuerySet)()
 
     @property
     def is_active(self):

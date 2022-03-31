@@ -127,7 +127,7 @@ class TypedComponentsStatusMetricsUtil(object):
 
     def get_components(self):
         from .models import Terminal
-        components = Terminal.objects.filter(is_deleted=False).order_by('type')
+        components = Terminal.objects.active().order_by('type')
         grouped_components = groupby(components, lambda c: c.type)
         grouped_components = [(i[0], list(i[1])) for i in grouped_components]
         self.grouped_components = grouped_components

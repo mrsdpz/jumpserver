@@ -132,9 +132,7 @@ class ServerPerformanceCheckUtil(object):
 
     def initial_terminals(self):
         terminals = []
-        for terminal in Terminal.objects.filter(is_deleted=False):
-            if not terminal.is_active:
-                continue
+        for terminal in Terminal.objects.alive():
             terminal.stat = Status.get_terminal_latest_stat(terminal)
             terminals.append(terminal)
         self._terminals = terminals

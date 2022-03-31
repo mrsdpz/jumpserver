@@ -5,57 +5,15 @@ from django.core.validators import RegexValidator
 from django.utils.translation import ugettext_lazy as _
 
 from orgs.mixins.serializers import BulkOrgResourceModelSerializer
+from common.drf.serializers import AssetProtocolsField as ProtocolsField
+from terminal.serializers import TerminalSerializer
 from ..models import Asset, Node, Platform, SystemUser
 
 __all__ = [
     'AssetSerializer', 'AssetSimpleSerializer', 'MiniAssetSerializer',
-    'ProtocolsField', 'PlatformSerializer',
-    'AssetTaskSerializer', 'AssetsTaskSerializer', 'ProtocolsField',
+    'PlatformSerializer',
+    'AssetTaskSerializer', 'AssetsTaskSerializer',
 ]
-
-
-class ProtocolField(serializers.RegexField):
-    protocols = '|'.join(dict(Asset.Protocol.choices).keys())
-    default_error_messages = {
-        'invalid': _('Protocol format should {}/{}').format(protocols, '1-65535')
-    }
-    regex = r'^(%s)/(\d{1,5})$' % protocols
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(self.regex, **kwargs)
-
-
-def validate_duplicate_protocols(values):
-    errors = []
-    names = []
-
-    for value in values:
-        if not value or '/' not in value:
-            continue
-        name = value.split('/')[0]
-        if name in names:
-            errors.append(_("Protocol duplicate: {}").format(name))
-        names.append(name)
-        errors.append('')
-    if any(errors):
-        raise serializers.ValidationError(errors)
-
-
-class ProtocolsField(serializers.ListField):
-    default_validators = [validate_duplicate_protocols]
-
-    def __init__(self, *args, **kwargs):
-        kwargs['child'] = ProtocolField()
-        kwargs['allow_null'] = True
-        kwargs['allow_empty'] = True
-        kwargs['min_length'] = 1
-        kwargs['max_length'] = 4
-        super().__init__(*args, **kwargs)
-
-    def to_representation(self, value):
-        if not value:
-            return []
-        return value.split(' ')
 
 
 class AssetSerializer(BulkOrgResourceModelSerializer):
@@ -69,6 +27,10 @@ class AssetSerializer(BulkOrgResourceModelSerializer):
     )
     labels_display = serializers.ListField(
         child=serializers.CharField(), label=_('Labels name'), required=False, read_only=True
+    )
+    proxy_terminals = serializers.ListSerializer(
+        source='get_proxy_terminals', child=TerminalSerializer(), label=_('Proxy terminal'),
+        read_only=True
     )
 
     """
@@ -89,7 +51,8 @@ class AssetSerializer(BulkOrgResourceModelSerializer):
             'cpu_info', 'hardware_info',
         ]
         fields_fk = [
-            'domain', 'domain_display', 'platform', 'admin_user', 'admin_user_display'
+            'domain', 'domain_display', 'platform', 'admin_user', 'admin_user_display',
+            'proxy_terminals'
         ]
         fields_m2m = [
             'nodes', 'nodes_display', 'labels', 'labels_display',

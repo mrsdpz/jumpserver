@@ -13,6 +13,7 @@ from rest_framework.exceptions import ValidationError
 
 from common.fields.model import JsonDictTextField
 from common.utils import lazyproperty
+from common.const.choices import AssetProtocol
 from orgs.mixins.models import OrgModelMixin, OrgManager
 
 from .base import AbsConnectivity
@@ -57,12 +58,7 @@ class AssetQuerySet(models.QuerySet):
 
 class ProtocolsMixin:
     protocols = ''
-
-    class Protocol(models.TextChoices):
-        ssh = 'ssh', 'SSH'
-        rdp = 'rdp', 'RDP'
-        telnet = 'telnet', 'Telnet'
-        vnc = 'vnc', 'VNC'
+    Protocol = AssetProtocol
 
     @property
     def protocols_as_list(self):
@@ -377,6 +373,25 @@ class Asset(AbsConnectivity, AbsHardwareInfo, ProtocolsMixin, NodesRelationMixin
             .values_list('systemuser_id', flat=True)
         system_users = SystemUser.objects.filter(id__in=system_user_ids)
         return system_users
+
+    def get_proxy_terminals(self):
+        terminals = self.get_relation_terminals()
+        if not terminals:
+            terminals = self.get_default_terminals()
+        return terminals
+
+    def get_relation_terminals(self):
+        from terminal.models import Terminal
+        if self.domain:
+            terminals = self.domain.get_alive_terminals()
+        else:
+            terminals = Terminal.objects.none()
+        return terminals
+
+    @staticmethod
+    def get_default_terminals():
+        from terminal.models import Terminal
+        return Terminal.objects.alive()
 
     class Meta:
         unique_together = [('org_id', 'hostname')]

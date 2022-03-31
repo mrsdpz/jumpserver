@@ -64,9 +64,7 @@ class BaseTerminal(object):
                 close_old_connections()
 
     def get_or_register_terminal(self):
-        terminal = Terminal.objects.filter(
-            name=self.name, type=self.type, is_deleted=False
-        ).first()
+        terminal = Terminal.objects.active().filter(name=self.name, type=self.type).first()
         if not terminal:
             terminal = self.register_terminal()
 

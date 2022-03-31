@@ -22,8 +22,9 @@ class Domain(OrgModelMixin):
     id = models.UUIDField(default=uuid.uuid4, primary_key=True)
     name = models.CharField(max_length=128, verbose_name=_('Name'))
     comment = models.TextField(blank=True, verbose_name=_('Comment'))
-    date_created = models.DateTimeField(auto_now_add=True, null=True,
-                                        verbose_name=_('Date created'))
+    date_created = models.DateTimeField(
+        auto_now_add=True, null=True, verbose_name=_('Date created')
+    )
 
     class Meta:
         verbose_name = _("Domain")
@@ -32,6 +33,9 @@ class Domain(OrgModelMixin):
 
     def __str__(self):
         return self.name
+
+    def get_alive_terminals(self):
+        return self.terminals.alive()
 
     def has_gateway(self):
         return self.gateway_set.filter(is_active=True).exists()

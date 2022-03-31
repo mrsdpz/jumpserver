@@ -5,7 +5,7 @@ from rest_framework import serializers
 from django.utils.translation import ugettext_lazy as _
 
 from assets.models import Node, SystemUser, Asset, Platform
-from assets.serializers import ProtocolsField
+from common.drf.serializers import AssetProtocolsField as ProtocolsField
 from perms.serializers.base import ActionsField
 
 __all__ = [

@@ -21,12 +21,13 @@ class DomainSerializer(BulkOrgResourceModelSerializer):
             'comment', 'date_created'
         ]
         fields_m2m = [
-            'asset_count', 'assets', 'application_count', 'gateway_count',
+            'asset_count', 'assets', 'terminals', 'application_count', 'gateway_count',
         ]
         fields = fields_small + fields_m2m
         read_only_fields = ('asset_count', 'gateway_count', 'date_created')
         extra_kwargs = {
             'assets': {'required': False, 'label': _('Assets')},
+            'terminals': {'required': False, 'label': _('Terminal')}
         }
 
     @staticmethod

@@ -86,7 +86,7 @@ class CommandStorage(CommonStorageModelMixin, CommonModelMixin):
         return store.ping(timeout=3)
 
     def is_use(self):
-        return Terminal.objects.filter(command_storage=self.name, is_deleted=False).exists()
+        return Terminal.objects.active().filter(command_storage=self.name).exists()
 
     def get_command_queryset(self):
         if self.type_server:
@@ -167,7 +167,7 @@ class ReplayStorage(CommonStorageModelMixin, CommonModelMixin):
         return storage.is_valid(src, target)
 
     def is_use(self):
-        return Terminal.objects.filter(replay_storage=self.name, is_deleted=False).exists()
+        return Terminal.objects.active().filter(replay_storage=self.name).exists()
 
     class Meta:
         verbose_name = _("Replay storage")
