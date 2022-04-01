@@ -1,4 +1,3 @@
-import copy
 from django.utils.translation import ugettext_lazy as _
 from rest_framework import serializers
 from rest_framework.serializers import Serializer
@@ -7,7 +6,6 @@ from rest_framework_bulk.serializers import BulkListSerializer
 
 from common.mixins import BulkListSerializerMixin
 from django.utils.functional import cached_property
-from rest_framework.utils.serializer_helpers import BindingDict
 from common.mixins.serializers import BulkSerializerMixin
 from common.const.choices import AssetProtocol
 

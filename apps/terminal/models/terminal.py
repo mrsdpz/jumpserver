@@ -4,7 +4,7 @@ from django.db import models
 from django.core.cache import cache
 from django.utils.translation import ugettext_lazy as _
 from django.conf import settings
-
+from django.core.validators import MinValueValidator, MaxValueValidator
 from common.utils import get_logger
 from users.models import User
 from orgs.utils import tmp_to_root_org
@@ -116,6 +116,33 @@ class TerminalManager(models.Manager):
         return self.get_queryset().alive()
 
 
+class Protocol(models.Model):
+    class Name(models.TextChoices):
+        http = 'http', 'HTTP'
+        ssh = 'ssh', 'SSH'
+        rdp = 'rdp', 'RDP'
+        mysql = 'mysql', 'MySQL'
+        oracle = 'oracle', 'Oracle'
+        mariadb = 'mariadb', 'MariaDB'
+        postgresql = 'postgresql', 'PostgreSQL'
+        sqlserver = 'sqlserver', 'SQLServer'
+        redis = 'redis', 'Redis'
+        mongodb = 'mongodb', 'MongoDB'
+
+    name = models.CharField(
+        max_length=64, choices=Name.choices, null=False, blank=False, verbose_name=_('Name')
+    )
+    port = models.IntegerField(
+        null=False, blank=False,
+        verbose_name=_('Port'),
+        validators=[MinValueValidator(1), MaxValueValidator(65535)],
+    )
+
+    class Meta:
+        verbose_name = _('Protocol')
+        ordering = ('name', )
+
+
 class Terminal(StorageMixin, TerminalStatusMixin, models.Model):
     id = models.UUIDField(default=uuid.uuid4, primary_key=True)
     name = models.CharField(max_length=128, verbose_name=_('Name'))
@@ -129,6 +156,7 @@ class Terminal(StorageMixin, TerminalStatusMixin, models.Model):
     command_storage = models.CharField(max_length=128, verbose_name=_("Command storage"), default='default')
     replay_storage = models.CharField(max_length=128, verbose_name=_("Replay storage"), default='default')
     user = models.OneToOneField(User, related_name='terminal', verbose_name='Application User', null=True, on_delete=models.CASCADE)
+    protocols = models.ManyToManyField('terminal.Protocol', related_name='terminals', verbose_name=_('Protocol'))
     is_accepted = models.BooleanField(default=False, verbose_name='Is Accepted')
     is_deleted = models.BooleanField(default=False)
     date_created = models.DateTimeField(auto_now_add=True)

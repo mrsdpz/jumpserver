@@ -1,15 +1,24 @@
 from rest_framework import serializers
 from django.utils.translation import ugettext_lazy as _
 
-from common.drf.serializers import BulkModelSerializer, AdaptedBulkListSerializer
+from common.drf.serializers import BulkModelSerializer
 from common.utils import is_uuid
 from users.serializers import ServiceAccountSerializer
 from common.utils import get_request_ip, pretty_string
 from .. import const
+from ..models import Protocol
 
 from ..models import (
     Terminal, Status, Task, CommandStorage, ReplayStorage
 )
+
+
+class ProtocolSerializer(serializers.ModelSerializer):
+    name_display = serializers.ReadOnlyField(source='get_name_display', label=_('Name'))
+
+    class Meta:
+        model = Protocol
+        fields = ['name', 'name_display', 'port']
 
 
 class StatusSerializer(serializers.ModelSerializer):
@@ -45,6 +54,9 @@ class TerminalSerializer(BulkModelSerializer):
     )
     status_display = serializers.CharField(read_only=True, source='latest_status_display')
     stat = StatusSerializer(read_only=True, source='latest_stat')
+    protocols_group = serializers.ManyRelatedField(
+        required=True, source='protocols', child_relation=ProtocolSerializer(), label=_('Protocol')
+    )
 
     class Meta:
         model = Terminal
@@ -56,7 +68,8 @@ class TerminalSerializer(BulkModelSerializer):
             'date_created', 'comment',
         ]
         fields_fk = ['status', 'status_display', 'stat']
-        fields = fields_small + fields_fk
+        fields_m2m = ['protocols_group']
+        fields = fields_small + fields_fk + fields_m2m
         read_only_fields = ['type', 'date_created']
         extra_kwargs = {
             'command_storage': {'required': True, },
@@ -87,6 +100,17 @@ class TerminalSerializer(BulkModelSerializer):
             return storage.name
         else:
             raise serializers.ValidationError(_('Not found'))
+
+    @staticmethod
+    def validate_protocols_group(protocols):
+        instances = []
+        for p in protocols:
+            name = p.get('name')
+            port = p.get('port')
+            data = {'name': name, 'port': int(port)}
+            instance, created = Protocol.objects.get_or_create(**data)
+            instances.append(instance)
+        return instances
 
 
 class TaskSerializer(BulkModelSerializer):
