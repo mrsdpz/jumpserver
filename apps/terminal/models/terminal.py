@@ -117,30 +117,67 @@ class TerminalManager(models.Manager):
 
 
 class Protocol(models.Model):
-    class Name(models.TextChoices):
-        http = 'http', 'HTTP'
-        ssh = 'ssh', 'SSH'
-        rdp = 'rdp', 'RDP'
-        mysql = 'mysql', 'MySQL'
-        oracle = 'oracle', 'Oracle'
-        mariadb = 'mariadb', 'MariaDB'
-        postgresql = 'postgresql', 'PostgreSQL'
-        sqlserver = 'sqlserver', 'SQLServer'
-        redis = 'redis', 'Redis'
-        mongodb = 'mongodb', 'MongoDB'
-
     name = models.CharField(
-        max_length=64, choices=Name.choices, null=False, blank=False, verbose_name=_('Name')
+        max_length=64, choices=const.ProtocolName.choices, null=False, blank=False, verbose_name=_('Name')
     )
     port = models.IntegerField(
-        null=False, blank=False,
-        verbose_name=_('Port'),
+        null=False, blank=False, verbose_name=_('Port'),
         validators=[MinValueValidator(1), MaxValueValidator(65535)],
     )
+    builtin = models.BooleanField(default=False, verbose_name=_('Builtin'))
 
     class Meta:
         verbose_name = _('Protocol')
         ordering = ('name', )
+        unique_together = ('name', 'port')
+
+    def __str__(self):
+        builtin = ' [built-in]' if self.builtin else ''
+        return f'{self.name}/{self.port}{builtin}'
+
+    @classmethod
+    def get_default_protocols_data(cls, ttype):
+        assert ttype in const.terminal_type_protocols_mapper, (
+            'No support terminal type: {}'.format(ttype)
+        )
+        support_protocols = const.terminal_type_protocols_mapper[ttype]
+        protocols_data = [
+            {'name': p.name, 'port': p.default_port, 'builtin': True}
+            for p in support_protocols
+        ]
+        return protocols_data
+
+    @classmethod
+    def get_default_protocols(cls, ttype):
+        data = cls.get_default_protocols_data(ttype)
+        return cls.get_or_create_protocols(data)
+
+    @classmethod
+    def get_initial_data(cls):
+        data = [
+            {'name': p.name, 'port': p.default_port, 'builtin': True}
+            for p in const.ProtocolName
+        ]
+        return data
+
+    @classmethod
+    def initial_to_db(cls):
+        data = cls.get_initial_data()
+        return cls.get_or_create_protocols(data)
+
+    @classmethod
+    def get_or_create_protocols(cls, data):
+        protocols = []
+        for d in data:
+            name = d.get('name')
+            port = d.get('port')
+            if not all([name, port]):
+                continue
+            protocol, created = cls.objects.get_or_create(**{
+                'name': name, 'port': port, 'builtin': True
+            })
+            protocols.append(protocol)
+        return protocols
 
 
 class Terminal(StorageMixin, TerminalStatusMixin, models.Model):
@@ -205,6 +242,10 @@ class Terminal(StorageMixin, TerminalStatusMixin, models.Model):
         })
         return configs
 
+    def reset_protocols_to_default(self):
+        default_protocols = Protocol.get_default_protocols(self.type)
+        self.protocols.set(default_protocols)
+
     @property
     def service_account(self):
         return self.user
@@ -215,7 +256,6 @@ class Terminal(StorageMixin, TerminalStatusMixin, models.Model):
         self.user = None
         self.is_deleted = True
         self.save()
-        return
 
     def __str__(self):
         status = "Active"
@@ -236,4 +276,3 @@ class Terminal(StorageMixin, TerminalStatusMixin, models.Model):
         permissions = (
             ('view_terminalconfig', _('Can view terminal config')),
         )
-

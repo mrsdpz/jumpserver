@@ -103,13 +103,7 @@ class TerminalSerializer(BulkModelSerializer):
 
     @staticmethod
     def validate_protocols_group(protocols):
-        instances = []
-        for p in protocols:
-            name = p.get('name')
-            port = p.get('port')
-            data = {'name': name, 'port': int(port)}
-            instance, created = Protocol.objects.get_or_create(**data)
-            instances.append(instance)
+        instances = Protocol.get_or_create_protocols(protocols)
         return instances
 
 
@@ -149,7 +143,7 @@ class TerminalRegistrationSerializer(serializers.ModelSerializer):
         return valid
 
     def create(self, validated_data):
-        instance = super().create(validated_data)
+        instance: Terminal = super().create(validated_data)
         request = self.context.get('request')
         instance.is_accepted = True
         if request:
@@ -160,4 +154,5 @@ class TerminalRegistrationSerializer(serializers.ModelSerializer):
         instance.command_storage = CommandStorage.default().name
         instance.replay_storage = ReplayStorage.default().name
         instance.save()
+        instance.reset_protocols_to_default()
         return instance

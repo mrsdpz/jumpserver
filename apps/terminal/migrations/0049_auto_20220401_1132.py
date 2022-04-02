@@ -4,43 +4,14 @@ from django.db import migrations, models
 
 
 def initial_default_protocol(apps, schema_editor):
-    db_alias = schema_editor.connection.alias
     Protocol = apps.get_model("terminal", "Protocol")
-    protocols = [
-        {'name': 'http', 'port': 80},
-        {'name': 'ssh', 'port': 22},
-        {'name': 'rdp', 'port': 3389},
-        {'name': 'mysql', 'port': 3306},
-        {'name': 'oracle', 'port': 1521},
-        {'name': 'mariadb', 'port': 3306},
-        {'name': 'postgresql', 'port': 5432},
-        {'name': 'sqlserver', 'port': 1433},
-        {'name': 'redis', 'port': 6379},
-        {'name': 'mongodb', 'port': 27017},
-    ]
-    protocols = [Protocol(**p) for p in protocols]
-    Protocol.objects.using(db_alias).bulk_create(protocols)
+    Protocol.initial_to_db()
 
 
 def migrate_terminal_protocols_field(apps, schema_editor):
     Terminal = apps.get_model("terminal", "Terminal")
-    Protocol = apps.get_model("terminal", "Protocol")
-    protocols_map = {p.name: p for p in Protocol.objects.all()}
-    type_default_protocols = {
-        'koko': ['http', 'ssh'],
-        'lion': ['http'],
-        'xrdp': ['rdp'],
-        'omnidb': ['http'],
-        'magnus': ['oracle', 'mariadb', 'postgresql', 'sqlserver', 'redis', 'mongodb']
-    }
-    for terminal in Terminal.objects.all():
-        protocol_names = type_default_protocols.get(terminal.type)
-        if not protocol_names:
-            continue
-        protocols = [protocols_map[name] for name in protocol_names if name in protocols_map]
-        if not protocols:
-            continue
-        terminal.protocols.set(protocols)
+    for t in Terminal.objects.all():
+        t.reset_protocols_to_default()
 
 
 class Migration(migrations.Migration):
