@@ -7,12 +7,12 @@ from django.conf import settings
 from django.utils.translation import ugettext_lazy as _
 from rest_framework import serializers
 
-from assets.models import AuthBook
-from assets.serializers import AccountSecretSerializer
+from assets.models import AuthBook, SystemUser, Asset
+from assets.serializers import AccountBackUpSerializer
 from assets.notifications import AccountBackupExecutionTaskMsg
-from applications.models import Account
+from applications.models import Account, Application
 from applications.const import AppType
-from applications.serializers import AppAccountSecretSerializer
+from applications.serializers import AppAccountBackUpSerializer
 from users.models import User
 from common.utils import get_logger
 from common.utils.timezone import local_now_display
@@ -38,7 +38,7 @@ class BaseAccountHandler:
     @classmethod
     def get_header_fields(cls, serializer: serializers.Serializer):
         try:
-            backup_fields = getattr(serializer, 'Meta').fields_backup
+            backup_fields = getattr(serializer, 'Meta').fields
         except AttributeError:
             backup_fields = serializer.fields.keys()
         header_fields = {}
@@ -51,16 +51,22 @@ class BaseAccountHandler:
                 header_fields[field] = str(v.label)
         return header_fields
 
+    @staticmethod
+    def load_auth(tp, value, system_user):
+        if value:
+            return value
+        if system_user:
+            return getattr(system_user, tp, '')
+        return ''
+
     @classmethod
-    def create_row(cls, account, serializer_cls, header_fields=None):
-        serializer = serializer_cls(account)
-        if not header_fields:
-            header_fields = cls.get_header_fields(serializer)
-        data = cls.unpack_data(serializer.data)
-        row_dict = {}
-        for field, header_name in header_fields.items():
-            row_dict[header_name] = str(data[field])
-        return row_dict
+    def replace_auth(cls, account, system_user_dict):
+        system_user = system_user_dict.get(account.systemuser_id)
+        account.username = cls.load_auth('username', account.username, system_user)
+        account.password = cls.load_auth('password', account.password, system_user)
+        account.private_key = cls.load_auth('private_key', account.private_key, system_user)
+        account.public_key = cls.load_auth('public_key', account.public_key, system_user)
+        return account
 
 
 class AssetAccountHandler(BaseAccountHandler):
@@ -72,22 +78,40 @@ class AssetAccountHandler(BaseAccountHandler):
         return filename
 
     @classmethod
-    def create_data_map(cls):
+    def replace_account_info(cls, account, asset_dict, system_user_dict):
+        asset = asset_dict.get(account.asset_id)
+        account.ip = asset.ip if asset else ''
+        account.hostname = asset.hostname if asset else ''
+        account = cls.replace_auth(account, system_user_dict)
+        return account
+
+    @classmethod
+    def create_row(cls, data, header_fields):
+        data = cls.unpack_data(data)
+        row_dict = {}
+        for field, header_name in header_fields.items():
+            row_dict[header_name] = str(data.get(field, field))
+        return row_dict
+
+    @classmethod
+    def create_data_map(cls, system_user_dict):
         data_map = defaultdict(list)
         sheet_name = AuthBook._meta.verbose_name
-
-        accounts = AuthBook.get_queryset().select_related('systemuser')
-        if not accounts.first():
+        assets = Asset.objects.only('id', 'hostname', 'ip')
+        asset_dict = {asset.id: asset for asset in assets}
+        accounts = AuthBook.objects.all()
+        if not accounts.exists():
             return data_map
 
-        header_fields = cls.get_header_fields(AccountSecretSerializer(accounts.first()))
+        header_fields = cls.get_header_fields(AccountBackUpSerializer(accounts.first()))
         for account in accounts:
-            account.load_auth()
-            row = cls.create_row(account, AccountSecretSerializer, header_fields)
+            cls.replace_account_info(account, asset_dict, system_user_dict)
+        data = AccountBackUpSerializer(accounts, many=True).data
+        for i in data:
+            row = cls.create_row(i, header_fields)
             if sheet_name not in data_map:
                 data_map[sheet_name].append(list(row.keys()))
             data_map[sheet_name].append(list(row.values()))
-
         logger.info('\n\033[33m- 共收集 {} 条资产账号\033[0m'.format(accounts.count()))
         return data_map
 
@@ -101,14 +125,36 @@ class AppAccountHandler(BaseAccountHandler):
         return filename
 
     @classmethod
-    def create_data_map(cls):
+    def replace_account_info(cls, account, app_dict, system_user_dict):
+        app = app_dict.get(account.app_id)
+        account.type = app.type if app else ''
+        account.app_display = app.name if app else ''
+        account.category = app.category if app else ''
+        account = cls.replace_auth(account, system_user_dict)
+        return account
+
+    @classmethod
+    def create_row(cls, account, serializer_cls):
+        serializer = serializer_cls(account)
+        header_fields = cls.get_header_fields(serializer)
+        data = cls.unpack_data(serializer.data)
+        row_dict = {}
+        for field, header_name in header_fields.items():
+            row_dict[header_name] = str(data[field])
+        return row_dict
+
+    @classmethod
+    def create_data_map(cls, system_user_dict):
         data_map = defaultdict(list)
-        accounts = Account.get_queryset().select_related('systemuser')
+        apps = Application.objects.only('id', 'type', 'name', 'category')
+        app_dict = {app.id: app for app in apps}
+        accounts = Account.objects.all()
         for account in accounts:
             account.load_auth()
+            account = cls.replace_account_info(account, app_dict, system_user_dict)
             app_type = account.type
             sheet_name = AppType.get_label(app_type)
-            row = cls.create_row(account, AppAccountSecretSerializer)
+            row = cls.create_row(account, AppAccountBackUpSerializer)
             if sheet_name not in data_map:
                 data_map[sheet_name].append(list(row.keys()))
             data_map[sheet_name].append(list(row.values()))
@@ -137,12 +183,16 @@ class AccountBackupHandler:
         # Print task start date
         time_start = time.time()
         files = []
+        system_user_qs = SystemUser.objects.only(
+            'id', 'username', 'password', 'private_key', 'public_key'
+        )
+        system_user_dict = {i.id: i for i in system_user_qs}
         for account_type in self.execution.types:
             handler = handler_map.get(account_type)
             if not handler:
                 continue
 
-            data_map = handler.create_data_map()
+            data_map = handler.create_data_map(system_user_dict)
             if not data_map:
                 continue
 

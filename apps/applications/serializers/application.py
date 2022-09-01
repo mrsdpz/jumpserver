@@ -16,7 +16,7 @@ from .. import const
 
 __all__ = [
     'AppSerializer', 'MiniAppSerializer', 'AppSerializerMixin',
-    'AppAccountSerializer', 'AppAccountSecretSerializer'
+    'AppAccountSerializer', 'AppAccountSecretSerializer', 'AppAccountBackUpSerializer'
 ]
 
 
@@ -154,11 +154,6 @@ class AppAccountSerializer(AppSerializerMixin, AuthSerializerMixin, BulkOrgResou
 
 class AppAccountSecretSerializer(SecretReadableMixin, AppAccountSerializer):
     class Meta(AppAccountSerializer.Meta):
-        fields_backup = [
-            'id', 'app_display', 'attrs', 'username', 'password', 'private_key',
-            'public_key', 'date_created', 'date_updated', 'version'
-        ]
-
         extra_kwargs = {
             'password': {'write_only': False},
             'private_key': {'write_only': False},
@@ -166,3 +161,18 @@ class AppAccountSecretSerializer(SecretReadableMixin, AppAccountSerializer):
             'app_display': {'label': _('Application display')},
             'systemuser_display': {'label': _('System User')}
         }
+
+
+class AppAccountBackUpSerializer(AppAccountSecretSerializer):
+    class Meta(AppAccountSecretSerializer.Meta):
+        fields = [
+            'id', 'app_display', 'attrs', 'username', 'password', 'private_key',
+            'public_key', 'date_created', 'date_updated', 'version'
+        ]
+
+    @classmethod
+    def setup_eager_loading(cls, queryset):
+        return queryset
+
+    def to_representation(self, instance):
+        return super(AppAccountSerializer, self).to_representation(instance)
