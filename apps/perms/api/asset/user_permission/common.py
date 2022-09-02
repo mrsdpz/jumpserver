@@ -100,7 +100,8 @@ class UserGrantedAssetSystemUsersForAdminApi(ListAPIView):
     serializer_class = serializers.AssetSystemUserSerializer
     only_fields = serializers.AssetSystemUserSerializer.Meta.only_fields
     rbac_perms = {
-        'list': 'perms.view_userassets'
+        'list': 'perms.view_userassets',
+        'GET': 'perms.view_userassets'
     }
 
     @lazyproperty
@@ -114,6 +115,12 @@ class UserGrantedAssetSystemUsersForAdminApi(ListAPIView):
         asset = get_object_or_404(Asset, id=asset_id, is_active=True)
         return self.get_asset_system_user_ids_with_actions(asset)
 
+    @lazyproperty
+    def get_asset_hostname(self):
+        asset_id = self.kwargs.get('asset_id')
+        asset = get_object_or_404(Asset, id=asset_id, is_active=True)
+        return asset.hostname
+
     def get_asset_system_user_ids_with_actions(self, asset):
         return get_asset_system_user_ids_with_actions_by_user(self.user, asset)
 
@@ -122,7 +129,7 @@ class UserGrantedAssetSystemUsersForAdminApi(ListAPIView):
         system_users = SystemUser.objects.filter(id__in=system_user_ids) \
             .only(*self.serializer_class.Meta.only_fields) \
             .order_by('name')
-        return system_users
+        return system_users.filter(name__startswith=self.get_asset_hostname)
 
     def paginate_queryset(self, queryset):
         page = super().paginate_queryset(queryset)
